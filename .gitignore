@@ -4,3 +4,11 @@ node_modules
 .DS_Store
 
 .vercel
+
+# deploy hygiene (auto-added)
+node_modules/
+.env.local
+data/
+*.sqlite3
+*.log
+__pycache__/

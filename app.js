@@ -1,4 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // XSS guard: escape user-supplied / AI-generated strings before innerHTML.
+  // Escaping before marked.parse() neutralizes embedded HTML while keeping markdown syntax working.
+  function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
   // Initialize Mermaid
   if (window.mermaid) {
     mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
@@ -209,9 +215,9 @@ impl VectorMathEngine {
     tabPreviewBtn.style.color = 'var(--neon-magenta)';
     
     if (window.marked) {
-      outputPreviewWrapper.innerHTML = marked.parse(outputDocContent.value || '# No Output Generated Yet');
+      outputPreviewWrapper.innerHTML = marked.parse(escapeHtml(outputDocContent.value || '# No Output Generated Yet'));
     } else {
-      outputPreviewWrapper.innerHTML = `<pre>${outputDocContent.value}</pre>`;
+      outputPreviewWrapper.innerHTML = `<pre>${escapeHtml(outputDocContent.value)}</pre>`;
     }
   });
 
@@ -311,7 +317,7 @@ impl VectorMathEngine {
       mermaidTarget.innerHTML = `<div class="mermaid">${currentMermaidCode}</div>`;
       await mermaid.run({ nodes: [mermaidTarget.querySelector('.mermaid')] });
     } catch (err) {
-      mermaidTarget.innerHTML = `<pre style="color:var(--neon-magenta);">${currentMermaidCode}</pre>`;
+      mermaidTarget.innerHTML = `<pre style="color:var(--neon-magenta);">${escapeHtml(currentMermaidCode)}</pre>`;
     }
   }
 
@@ -375,7 +381,7 @@ impl VectorMathEngine {
       if (data.generatedDoc) {
         outputDocContent.value = data.generatedDoc;
         if (window.marked) {
-          outputPreviewWrapper.innerHTML = marked.parse(data.generatedDoc);
+          outputPreviewWrapper.innerHTML = marked.parse(escapeHtml(data.generatedDoc));
         }
         if (data.jsonSchemaDoc) {
           outputJsonContent.textContent = JSON.stringify(data.jsonSchemaDoc, null, 2);
@@ -471,14 +477,14 @@ impl VectorMathEngine {
         <div style="background: rgba(11, 7, 25, 0.8); border: 1px solid var(--border); padding: 1.25rem; border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
           <div>
             <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 700; color: var(--neon-lime);">${item.title}</span>
-              <span style="font-size: 11px; padding: 2px 8px; border-radius: 20px; background: rgba(238, 41, 255, 0.2); color: var(--neon-magenta); border: 1px solid rgba(238, 41, 255, 0.4);">${item.format.toUpperCase()}</span>
-              <span style="font-size: 11px; color: var(--text-muted);">${item.created_at || ''}</span>
+              <span style="font-weight: 700; color: var(--neon-lime);">${escapeHtml(item.title)}</span>
+              <span style="font-size: 11px; padding: 2px 8px; border-radius: 20px; background: rgba(238, 41, 255, 0.2); color: var(--neon-magenta); border: 1px solid rgba(238, 41, 255, 0.4);">${escapeHtml(String(item.format || '').toUpperCase())}</span>
+              <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(item.created_at || '')}</span>
             </div>
-            <pre style="font-size: 11px; color: var(--text-muted); max-height: 80px; overflow: hidden; background: rgba(0,0,0,0.4); padding: 8px; border-radius: 4px;">${item.generated_doc.slice(0, 180)}...</pre>
+            <pre style="font-size: 11px; color: var(--text-muted); max-height: 80px; overflow: hidden; background: rgba(0,0,0,0.4); padding: 8px; border-radius: 4px;">${escapeHtml(String(item.generated_doc || '').slice(0, 180))}...</pre>
           </div>
           <div style="display: flex; gap: 8px;">
-            <button class="btn secondary btn-sm" onclick="loadHistoryItem(${item.id})">Load</button>
+            <button class="btn secondary btn-sm" onclick="loadHistoryItem(${Number(item.id)})">Load</button>
           </div>
         </div>
       `).join('');
@@ -551,14 +557,14 @@ impl VectorMathEngine {
           ragCitationsGrid.innerHTML = data.citations.map(c => `
             <div class="citation-card">
               <div class="citation-header">
-                <span class="citation-title">📌 ${c.citation_id} (${c.format || 'CODE'})</span>
-                <span class="citation-match-badge">${c.similarity_pct}% Vector Match</span>
+                <span class="citation-title">📌 ${escapeHtml(c.citation_id)} (${escapeHtml(c.format || 'CODE')})</span>
+                <span class="citation-match-badge">${Number(c.similarity_pct)}% Vector Match</span>
               </div>
-              <div style="font-size: 0.8rem; font-weight: 700; color: var(--neon-lime); margin-bottom: 4px;">${c.title}</div>
-              <div class="citation-text">${c.text}</div>
+              <div style="font-size: 0.8rem; font-weight: 700; color: var(--neon-lime); margin-bottom: 4px;">${escapeHtml(c.title)}</div>
+              <div class="citation-text">${escapeHtml(c.text)}</div>
               <div class="citation-footer">
-                <span>Format: <strong>${c.format}</strong></span>
-                <span>Cos Similarity: <strong>${(c.similarity_pct / 100).toFixed(2)}</strong></span>
+                <span>Format: <strong>${escapeHtml(c.format)}</strong></span>
+                <span>Cos Similarity: <strong>${(Number(c.similarity_pct) / 100).toFixed(2)}</strong></span>
               </div>
             </div>
           `).join('');

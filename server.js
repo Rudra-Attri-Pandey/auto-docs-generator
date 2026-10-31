@@ -1,15 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
 const { getDB, saveDB, saveDocVectors, getDocVectors, clearDocVectors } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3003;
-const JWT_SECRET = process.env.JWT_SECRET || 'docuforge-ai-secret-2026';
 
-app.use(cors());
+app.use(cors({ origin: (process.env.CORS_ORIGINS || 'http://localhost:3003').split(',') }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname)));
 
@@ -222,11 +219,18 @@ describe('DocuForge Generated Test Suite', () => {
 }
 
 // REST API Endpoints
+const VALID_DOC_FORMATS = ['readme', 'api', 'comments', 'architecture', 'unittest', 'security', 'changelog'];
 app.post('/api/generate-docs', async (req, res) => {
   try {
     const { code, format = 'readme', title = 'Code Module', userApiKey } = req.body;
-    if (!code) {
+    if (typeof code !== 'string' || !code.trim()) {
       return res.status(400).json({ error: 'Source code input is required' });
+    }
+    if (code.length > 60000) {
+      return res.status(400).json({ error: 'Source code exceeds maximum length of 60000 characters' });
+    }
+    if (!VALID_DOC_FORMATS.includes(format)) {
+      return res.status(400).json({ error: `Invalid format. Must be one of: ${VALID_DOC_FORMATS.join(', ')}` });
     }
 
     const generatedDoc = await generateDocsWithLLM(code, format, userApiKey);
@@ -239,8 +243,10 @@ app.post('/api/generate-docs', async (req, res) => {
         [title || 'Code Module', format, code, generatedDoc]
       );
       saveDB();
-      // Auto-index code & doc into RAG Vector Store
-      autoIndexDocInVectorStore(code, format, generatedDoc);
+      // Auto-index code & doc into RAG Vector Store (async, errors handled)
+      autoIndexDocInVectorStore(code, format, generatedDoc).catch(err =>
+        console.warn('Background auto-indexing failed:', err.message)
+      );
     } catch (dbErr) {
       console.warn('DB Save warning:', dbErr.message);
     }
@@ -295,8 +301,12 @@ app.get('/api/history', async (req, res) => {
 
 app.delete('/api/history/:id', async (req, res) => {
   try {
+    const { id } = req.params;
+    if (!id || typeof id !== 'string' || id.length > 64 || !/^[A-Za-z0-9_-]+$/.test(id)) {
+      return res.status(400).json({ error: 'Invalid history id' });
+    }
     const db = await getDB();
-    db.run(`DELETE FROM docs_history WHERE id = ?`, [req.params.id]);
+    db.run(`DELETE FROM docs_history WHERE id = ?`, [id]);
     saveDB();
     res.json({ success: true });
   } catch (err) {

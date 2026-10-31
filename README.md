@@ -69,3 +69,8 @@ Simply open `index.html` in your browser, or spin up a local development server:
 ```bash
 npx live-server .
 ```
+
+---
+
+## Demo data note
+Demo mode — your data lives in temporary storage and resets when the server restarts or redeploys. Connect a persistent database (e.g. Supabase Postgres) for production.
