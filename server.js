@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { getDB, saveDB, saveDocVectors, getDocVectors, clearDocVectors } = require('./db');
+const { insertDocHistory, listDocHistory, deleteDocHistory, saveDocVectors, getDocVectors, clearDocVectors, storeMode } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3003;
@@ -28,6 +28,11 @@ app.get('/app.js', (req, res) => {
 
 app.get('/logo.png', (req, res) => {
   res.sendFile(path.join(__dirname, 'logo.png'));
+});
+
+// Health + active store indicator (supabase | sqlite)
+app.get('/health', (req, res) => {
+  res.json({ ok: true, store: storeMode() });
 });
 
 // Helper LLM Prompt Formatter for 7 Format Types
@@ -237,12 +242,12 @@ app.post('/api/generate-docs', async (req, res) => {
 
     // Save to DB safely
     try {
-      const db = await getDB();
-      db.run(
-        `INSERT INTO docs_history (title, format, raw_code, generated_doc) VALUES (?, ?, ?, ?)`,
-        [title || 'Code Module', format, code, generatedDoc]
-      );
-      saveDB();
+      await insertDocHistory({
+        title: title || 'Code Module',
+        format,
+        raw_code: code,
+        generated_doc: generatedDoc
+      });
       // Auto-index code & doc into RAG Vector Store (async, errors handled)
       autoIndexDocInVectorStore(code, format, generatedDoc).catch(err =>
         console.warn('Background auto-indexing failed:', err.message)
@@ -279,20 +284,7 @@ app.post('/api/generate-docs', async (req, res) => {
 
 app.get('/api/history', async (req, res) => {
   try {
-    const db = await getDB();
-    const result = db.exec(`SELECT * FROM docs_history ORDER BY id DESC LIMIT 20`);
-    if (result.length === 0) {
-      return res.json([]);
-    }
-    const columns = result[0].columns;
-    const values = result[0].values;
-    const items = values.map(row => {
-      const obj = {};
-      columns.forEach((col, idx) => {
-        obj[col] = row[idx];
-      });
-      return obj;
-    });
+    const items = await listDocHistory(20);
     res.json(items);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch history' });
@@ -305,9 +297,7 @@ app.delete('/api/history/:id', async (req, res) => {
     if (!id || typeof id !== 'string' || id.length > 64 || !/^[A-Za-z0-9_-]+$/.test(id)) {
       return res.status(400).json({ error: 'Invalid history id' });
     }
-    const db = await getDB();
-    db.run(`DELETE FROM docs_history WHERE id = ?`, [id]);
-    saveDB();
+    await deleteDocHistory(id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete entry' });
@@ -431,7 +421,7 @@ app.post('/api/rag/index-code', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Successfully indexed ${chunks.length} code/doc chunks into WASM vector store`,
+      message: `Successfully indexed ${chunks.length} code/doc chunks into ${storeMode() === 'supabase' ? 'Supabase' : 'WASM'} vector store`,
       indexedCount: chunks.length
     });
   } catch (err) {
@@ -564,7 +554,7 @@ app.post('/api/rag/clear', async (req, res) => {
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`DocuForge AI Server running at http://localhost:${PORT}`);
+    console.log(`DocuForge AI Server running at http://localhost:${PORT} | Store: ${storeMode() === 'supabase' ? 'Supabase PostgREST' : 'local SQLite (dev)'}`);
   });
 }
 

@@ -72,5 +72,6 @@ npx live-server .
 
 ---
 
-## Demo data note
-Demo mode — your data lives in temporary storage and resets when the server restarts or redeploys. Connect a persistent database (e.g. Supabase Postgres) for production.
+## Data storage
+- **Supabase (recommended):** set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in `.env` — docs history and RAG vectors persist to Postgres (`docuai_docs`, `docuai_vectors`).
+- **Local dev (default):** with those unset, data lives in a local sql.js SQLite file and resets on redeploy — fine for demos, not for production.
